@@ -18,26 +18,31 @@ export class AuthService {
   public currentUser = this.currentUserSignal.asReadonly();
   public isLoggedIn = computed(() => !!this.currentUserSignal());
 
-  constructor(private http: HttpClient) {
-    this.loadUserFromToken();
-  }
+  constructor(private http: HttpClient) {}
 
   getToken(): string | null {
     return localStorage.getItem('token');
   }
 
-  private loadUserFromToken() {
+  init(): Observable<any> {
     const token = this.getToken();
-    if (token) {
-      this.http.get<User>(`${this.apiUrl}/users/me`).subscribe({
-        next: (user) => {
-          this.currentUserSignal.set(user);
-        },
-        error: () => {
-          this.logout();
-        }
-      });
+    if (!token) {
+      return of(null);
     }
+    
+    return this.http.get<User>(`${this.apiUrl}/users/me`).pipe(
+      tap(user => {
+        this.currentUserSignal.set(user);
+      }),
+      catchError(() => {
+        this.logout();
+        return of(null);
+      })
+    );
+  }
+
+  private loadUserFromToken() {
+    this.init().subscribe();
   }
 
   signup(username: string, password: string): Observable<User> {
