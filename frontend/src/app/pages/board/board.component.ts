@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -10,7 +10,6 @@ import {
   CdkDropList,
   CdkDropListGroup
 } from '@angular/cdk/drag-drop';
-import { Subscription } from 'rxjs';
 import { BoardService } from '../../services/board.service';
 import { Task, TaskStatus } from '../../models/task.model';
 
@@ -72,20 +71,20 @@ import { Task, TaskStatus } from '../../models/task.model';
                 <h3 class="font-bold text-slate-900 tracking-tight font-['Outfit']">To Do</h3>
               </div>
               <span class="bg-slate-200/50 text-slate-500 py-1 px-3 rounded-full text-xs font-bold tracking-wider">
-                {{ todoTasks.length }}
+                {{ todoTasks().length }}
               </span>
             </div>
             <div 
               id="TODO"
               cdkDropList
-              [cdkDropListData]="todoTasks"
+              [cdkDropListData]="todoTasks()"
               (cdkDropListDropped)="drop($event)"
               class="flex-1 p-4 space-y-4 overflow-y-auto"
             >
-              <div *ngFor="let task of todoTasks" cdkDrag class="task-card group">
+              <div *ngFor="let task of todoTasks()" cdkDrag class="task-card group">
                 <ng-container *ngTemplateOutlet="taskTemplate; context: { $implicit: task }"></ng-container>
               </div>
-              <div *ngIf="todoTasks.length === 0" class="empty-state">Empty</div>
+              <div *ngIf="todoTasks().length === 0" class="empty-state">Empty</div>
             </div>
           </div>
 
@@ -97,20 +96,20 @@ import { Task, TaskStatus } from '../../models/task.model';
                 <h3 class="font-bold text-slate-900 tracking-tight font-['Outfit']">In Progress</h3>
               </div>
               <span class="bg-slate-200/50 text-slate-500 py-1 px-3 rounded-full text-xs font-bold tracking-wider">
-                {{ inProgressTasks.length }}
+                {{ inProgressTasks().length }}
               </span>
             </div>
             <div 
               id="IN_PROGRESS"
               cdkDropList
-              [cdkDropListData]="inProgressTasks"
+              [cdkDropListData]="inProgressTasks()"
               (cdkDropListDropped)="drop($event)"
               class="flex-1 p-4 space-y-4 overflow-y-auto"
             >
-              <div *ngFor="let task of inProgressTasks" cdkDrag class="task-card group">
+              <div *ngFor="let task of inProgressTasks()" cdkDrag class="task-card group">
                 <ng-container *ngTemplateOutlet="taskTemplate; context: { $implicit: task }"></ng-container>
               </div>
-              <div *ngIf="inProgressTasks.length === 0" class="empty-state">Empty</div>
+              <div *ngIf="inProgressTasks().length === 0" class="empty-state">Empty</div>
             </div>
           </div>
 
@@ -122,20 +121,20 @@ import { Task, TaskStatus } from '../../models/task.model';
                 <h3 class="font-bold text-slate-900 tracking-tight font-['Outfit']">Done</h3>
               </div>
               <span class="bg-slate-200/50 text-slate-500 py-1 px-3 rounded-full text-xs font-bold tracking-wider">
-                {{ doneTasks.length }}
+                {{ doneTasks().length }}
               </span>
             </div>
             <div 
               id="DONE"
               cdkDropList
-              [cdkDropListData]="doneTasks"
+              [cdkDropListData]="doneTasks()"
               (cdkDropListDropped)="drop($event)"
               class="flex-1 p-4 space-y-4 overflow-y-auto"
             >
-              <div *ngFor="let task of doneTasks" cdkDrag class="task-card group">
+              <div *ngFor="let task of doneTasks()" cdkDrag class="task-card group">
                 <ng-container *ngTemplateOutlet="taskTemplate; context: { $implicit: task }"></ng-container>
               </div>
-              <div *ngIf="doneTasks.length === 0" class="empty-state">Empty</div>
+              <div *ngIf="doneTasks().length === 0" class="empty-state">Empty</div>
             </div>
           </div>
 
@@ -190,7 +189,7 @@ import { Task, TaskStatus } from '../../models/task.model';
     }
   `]
 })
-export class BoardComponent implements OnInit, OnDestroy {
+export class BoardComponent implements OnInit {
   boardId: string = '';
   boardTitle: string = '';
   newTaskTitle: string = '';
@@ -199,11 +198,24 @@ export class BoardComponent implements OnInit, OnDestroy {
   editingTaskId: string | null = null;
   editingTitle: string = '';
   
-  todoTasks: Task[] = [];
-  inProgressTasks: Task[] = [];
-  doneTasks: Task[] = [];
+  // Computed signals for columns
+  todoTasks = computed(() => 
+    this.boardService.tasks()
+      .filter(t => t.status === 'TODO')
+      .sort((a,b) => (a.position || 0) - (b.position || 0))
+  );
   
-  private subscription: Subscription = new Subscription();
+  inProgressTasks = computed(() => 
+    this.boardService.tasks()
+      .filter(t => t.status === 'IN_PROGRESS')
+      .sort((a,b) => (a.position || 0) - (b.position || 0))
+  );
+  
+  doneTasks = computed(() => 
+    this.boardService.tasks()
+      .filter(t => t.status === 'DONE')
+      .sort((a,b) => (a.position || 0) - (b.position || 0))
+  );
 
   constructor(
     private route: ActivatedRoute,
@@ -218,20 +230,7 @@ export class BoardComponent implements OnInit, OnDestroy {
       this.boardService.getBoard(this.boardId).subscribe(board => {
         this.boardTitle = board.title;
       });
-
-      this.subscription.add(
-        this.boardService.tasks$.subscribe(tasks => {
-          // Reset tasks in a way that preserves references for CDK
-          this.todoTasks = tasks.filter(t => t.status === 'TODO').sort((a,b) => (a.position || 0) - (b.position || 0));
-          this.inProgressTasks = tasks.filter(t => t.status === 'IN_PROGRESS').sort((a,b) => (a.position || 0) - (b.position || 0));
-          this.doneTasks = tasks.filter(t => t.status === 'DONE').sort((a,b) => (a.position || 0) - (b.position || 0));
-        })
-      );
     }
-  }
-
-  ngOnDestroy(): void {
-    this.subscription.unsubscribe();
   }
 
   addTask(): void {
@@ -281,10 +280,11 @@ export class BoardComponent implements OnInit, OnDestroy {
   }
 
   private saveOrder(): void {
+    // Note: todoTasks(), inProgressTasks() etc return new arrays, but we map them to get a full board state
     const updatedTasks: Task[] = [
-      ...this.todoTasks.map((t, i) => ({ ...t, status: 'TODO' as TaskStatus, position: i })),
-      ...this.inProgressTasks.map((t, i) => ({ ...t, status: 'IN_PROGRESS' as TaskStatus, position: i })),
-      ...this.doneTasks.map((t, i) => ({ ...t, status: 'DONE' as TaskStatus, position: i }))
+      ...this.todoTasks().map((t, i) => ({ ...t, status: 'TODO' as TaskStatus, position: i })),
+      ...this.inProgressTasks().map((t, i) => ({ ...t, status: 'IN_PROGRESS' as TaskStatus, position: i })),
+      ...this.doneTasks().map((t, i) => ({ ...t, status: 'DONE' as TaskStatus, position: i }))
     ];
     
     this.boardService.updateTasks(updatedTasks);

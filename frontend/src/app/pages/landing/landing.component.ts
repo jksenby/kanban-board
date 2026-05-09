@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { Router, RouterModule } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
@@ -23,7 +23,7 @@ import { AuthService } from '../../services/auth.service';
         </div>
         
         <div class="flex items-center space-x-6">
-          <ng-container *ngIf="isLoggedIn; else loggedOutNav">
+          <ng-container *ngIf="authService.isLoggedIn(); else loggedOutNav">
             <button routerLink="/dashboard" class="btn-primary">Dashboard</button>
           </ng-container>
           <ng-template #loggedOutNav>
@@ -50,7 +50,7 @@ import { AuthService } from '../../services/auth.service';
           </div>
 
           <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <ng-container *ngIf="isLoggedIn; else loggedOutCta">
+            <ng-container *ngIf="authService.isLoggedIn(); else loggedOutCta">
               <button routerLink="/dashboard" class="btn-primary !px-10 !py-5 text-xl">
                 Go to Your Dashboard
               </button>
@@ -84,14 +84,6 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `
 })
-export class LandingComponent implements OnInit {
-  isLoggedIn = false;
-
-  constructor(private authService: AuthService) {}
-
-  ngOnInit() {
-    this.authService.currentUser$.subscribe(user => {
-      this.isLoggedIn = !!user;
-    });
-  }
+export class LandingComponent {
+  constructor(public authService: AuthService) {}
 }

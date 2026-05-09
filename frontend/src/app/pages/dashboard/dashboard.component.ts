@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { AuthService, User } from '../../services/auth.service';
+import { AuthService } from '../../services/auth.service';
 import { BoardService } from '../../services/board.service';
 
 @Component({
@@ -24,11 +24,11 @@ import { BoardService } from '../../services/board.service';
             
             <div class="flex items-center space-x-6">
               <div class="hidden sm:flex flex-col items-end">
-                <span class="text-sm font-bold text-slate-900">{{ currentUser?.username }}</span>
+                <span class="text-sm font-bold text-slate-900">{{ authService.currentUser()?.username }}</span>
                 <span class="text-xs text-slate-500">Student Account</span>
               </div>
               <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold border-2 border-indigo-200">
-                {{ currentUser?.username?.charAt(0)?.toUpperCase() }}
+                {{ authService.currentUser()?.username?.charAt(0)?.toUpperCase() }}
               </div>
               <button (click)="logout()" class="text-sm font-semibold text-slate-400 hover:text-red-500 transition-colors">Logout</button>
             </div>
@@ -119,21 +119,17 @@ import { BoardService } from '../../services/board.service';
   `
 })
 export class DashboardComponent implements OnInit {
-  currentUser: User | null = null;
   boards: any[] = [];
   newBoardTitle = '';
   creating = false;
 
   constructor(
-    private authService: AuthService,
+    public authService: AuthService,
     private boardService: BoardService,
     private router: Router
   ) {}
 
   ngOnInit() {
-    this.authService.currentUser$.subscribe(user => {
-      this.currentUser = user;
-    });
     this.loadBoards();
   }
 

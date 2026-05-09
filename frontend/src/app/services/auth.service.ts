@@ -1,15 +1,10 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, tap } from 'rxjs';
+import { Observable, tap, catchError, of } from 'rxjs';
 
 export interface User {
   id: string;
   username: string;
-}
-
-export interface AuthResponse {
-  access_token: string;
-  token_type: string;
 }
 
 @Injectable({
@@ -17,43 +12,44 @@ export interface AuthResponse {
 })
 export class AuthService {
   private apiUrl = 'http://localhost:8000/api';
-  private currentUserSubject = new BehaviorSubject<User | null>(null);
-  public currentUser$ = this.currentUserSubject.asObservable();
+  
+  // Signals for state
+  private currentUserSignal = signal<User | null>(null);
+  public currentUser = this.currentUserSignal.asReadonly();
+  public isLoggedIn = computed(() => !!this.currentUserSignal());
 
   constructor(private http: HttpClient) {
     this.loadUserFromToken();
-  }
-
-  private loadUserFromToken() {
-    const token = localStorage.getItem('token');
-    if (token) {
-      this.http.get<User>(`${this.apiUrl}/users/me`).subscribe({
-        next: (user) => this.currentUserSubject.next(user),
-        error: () => this.logout() // Invalid token
-      });
-    }
   }
 
   getToken(): string | null {
     return localStorage.getItem('token');
   }
 
-  isLoggedIn(): boolean {
-    return !!this.getToken();
+  private loadUserFromToken() {
+    const token = this.getToken();
+    if (token) {
+      this.http.get<User>(`${this.apiUrl}/users/me`).subscribe({
+        next: (user) => {
+          this.currentUserSignal.set(user);
+        },
+        error: () => {
+          this.logout();
+        }
+      });
+    }
   }
 
   signup(username: string, password: string): Observable<User> {
     return this.http.post<User>(`${this.apiUrl}/signup`, { username, password });
   }
 
-  login(username: string, password: string): Observable<AuthResponse> {
-    const formData = new URLSearchParams();
-    formData.set('username', username);
-    formData.set('password', password);
+  login(username: string, password: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('username', username);
+    formData.append('password', password);
 
-    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, formData.toString(), {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    }).pipe(
+    return this.http.post<any>(`${this.apiUrl}/login`, formData).pipe(
       tap(response => {
         localStorage.setItem('token', response.access_token);
         this.loadUserFromToken();
@@ -61,8 +57,8 @@ export class AuthService {
     );
   }
 
-  logout(): void {
+  logout() {
     localStorage.removeItem('token');
-    this.currentUserSubject.next(null);
+    this.currentUserSignal.set(null);
   }
 }
