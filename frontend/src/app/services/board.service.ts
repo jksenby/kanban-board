@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Task, TaskStatus } from '../models/task.model';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationService } from './notification.service';
 
 @Injectable({
   providedIn: 'root'
@@ -16,7 +17,10 @@ export class BoardService {
   
   private currentBoardId: string | null = null;
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private notificationService: NotificationService
+  ) {}
 
   loadBoard(boardId: string): void {
     this.currentBoardId = boardId;
@@ -25,7 +29,7 @@ export class BoardService {
         this.tasksSignal.set(tasks);
       },
       error: (err) => {
-        console.error('Failed to load board tasks', err);
+        this.notificationService.error('Failed to load tasks');
         this.tasksSignal.set([]);
       }
     });
@@ -64,7 +68,7 @@ export class BoardService {
     // API Call (Background)
     this.http.post<Task>(`${this.apiUrl}/boards/${this.currentBoardId}/tasks`, newTask).subscribe({
       error: (err) => {
-        console.error('Failed to add task', err);
+        this.notificationService.error('Failed to save task. Sync failed.');
         // Rollback
         this.tasksSignal.update(tasks => tasks.filter(t => t.id !== newTask.id));
       }
@@ -82,7 +86,7 @@ export class BoardService {
     // API Call
     this.http.patch(`${this.apiUrl}/tasks/${taskId}`, updates).subscribe({
       error: (err) => {
-        console.error('Failed to update task', err);
+        this.notificationService.error('Failed to update task.');
         this.tasksSignal.set(previousTasks);
       }
     });
@@ -99,7 +103,7 @@ export class BoardService {
     // API Call
     this.http.put(`${this.apiUrl}/boards/${this.currentBoardId}/tasks`, tasks).subscribe({
       error: (err) => {
-        console.error('Failed to update tasks', err);
+        this.notificationService.error('Failed to sync task order.');
         this.tasksSignal.set(previousTasks);
       }
     });
@@ -115,7 +119,7 @@ export class BoardService {
     // API Call
     this.http.delete(`${this.apiUrl}/tasks/${taskId}`).subscribe({
       error: (err) => {
-        console.error('Failed to delete task', err);
+        this.notificationService.error('Failed to delete task.');
         this.tasksSignal.set(previousTasks);
       }
     });
