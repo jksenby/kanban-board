@@ -19,8 +19,6 @@ export class NotificationService {
     const notification: Notification = { message, type, id };
     
     this.notificationsSignal.update(n => [...n, notification]);
-
-    // Auto-remove after 5 seconds
     setTimeout(() => {
       this.remove(id);
     }, 5000);
