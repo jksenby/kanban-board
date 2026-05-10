@@ -1,6 +1,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, of, switchMap } from 'rxjs';
 
 export interface User {
   id: string;
@@ -41,9 +41,6 @@ export class AuthService {
     );
   }
 
-  private loadUserFromToken() {
-    this.init().subscribe();
-  }
 
   signup(username: string, password: string): Observable<User> {
     return this.http.post<User>(`${this.apiUrl}/signup`, { username, password });
@@ -55,9 +52,9 @@ export class AuthService {
     formData.append('password', password);
 
     return this.http.post<any>(`${this.apiUrl}/login`, formData).pipe(
-      tap(response => {
+      switchMap(response => {
         localStorage.setItem('token', response.access_token);
-        this.loadUserFromToken();
+        return this.init();
       })
     );
   }

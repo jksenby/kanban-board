@@ -23,13 +23,9 @@ import { AuthService } from '../../services/auth.service';
         </div>
         
         <div class="flex items-center space-x-6">
-          <ng-container *ngIf="authService.isLoggedIn(); else loggedOutNav">
+          <ng-container *ngIf="authService.isLoggedIn()">
             <button routerLink="/dashboard" class="btn-primary">Dashboard</button>
           </ng-container>
-          <ng-template #loggedOutNav>
-            <button routerLink="/login" class="text-slate-600 font-semibold hover:text-indigo-600 transition-colors">Log in</button>
-            <button routerLink="/signup" class="btn-primary">Get Started</button>
-          </ng-template>
         </div>
       </nav>
 
@@ -63,16 +59,6 @@ import { AuthService } from '../../services/auth.service';
                 Sign In
               </button>
             </ng-template>
-          </div>
-          
-          <!-- Social Proof / Badge -->
-          <div class="flex items-center justify-center space-x-2 pt-8">
-            <div class="flex -space-x-2">
-              <div *ngFor="let i of [1,2,3,4]" class="w-8 h-8 rounded-full border-2 border-white bg-slate-200"></div>
-            </div>
-            <p class="text-sm font-medium text-slate-400 uppercase tracking-widest">
-              Trusted by 5,000+ students
-            </p>
           </div>
         </div>
       </main>

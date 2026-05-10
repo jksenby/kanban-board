@@ -2,6 +2,15 @@ import { Injectable, OnDestroy } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 import { Task } from '../models/task.model';
 
+export interface ChatMessage {
+  id: string;
+  boardId: string;
+  userId: string;
+  username: string;
+  content: string;
+  timestamp: string;
+}
+
 export type WsStatus = 'connecting' | 'connected' | 'disconnected';
 
 @Injectable({
@@ -10,19 +19,27 @@ export type WsStatus = 'connecting' | 'connected' | 'disconnected';
 export class WebsocketService implements OnDestroy {
   private ws: WebSocket | null = null;
   private taskSubject = new Subject<Task[]>();
+  private chatSubject = new Subject<ChatMessage>();
+  private historySubject = new Subject<ChatMessage[]>();
   private statusSubject = new Subject<WsStatus>();
 
   private currentBoardId: string | null = null;
   private reconnectTimer: any = null;
-  private reconnectDelay = 1000; // ms, doubles on each failure
+  private reconnectDelay = 1000;
   private destroyed = false;
 
-  /** Emits whenever the server pushes an updated task list. */
   get tasks$(): Observable<Task[]> {
     return this.taskSubject.asObservable();
   }
 
-  /** Emits the current connection status. */
+  get chatMessage$(): Observable<ChatMessage> {
+    return this.chatSubject.asObservable();
+  }
+
+  get chatHistory$(): Observable<ChatMessage[]> {
+    return this.historySubject.asObservable();
+  }
+
   get status$(): Observable<WsStatus> {
     return this.statusSubject.asObservable();
   }
@@ -44,6 +61,15 @@ export class WebsocketService implements OnDestroy {
     this.statusSubject.next('disconnected');
   }
 
+  sendMessage(payload: { userId: string, username: string, content: string }): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'send_message',
+        payload
+      }));
+    }
+  }
+
   private openSocket(): void {
     if (!this.currentBoardId || this.destroyed) return;
 
@@ -52,18 +78,26 @@ export class WebsocketService implements OnDestroy {
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      this.reconnectDelay = 1000; // reset backoff on success
+      this.reconnectDelay = 1000;
       this.statusSubject.next('connected');
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'tasks_updated' && Array.isArray(data.tasks)) {
-          this.taskSubject.next(data.tasks as Task[]);
+        switch (data.type) {
+          case 'tasks_updated':
+            this.taskSubject.next(data.tasks);
+            break;
+          case 'chat_message':
+            this.chatSubject.next(data.message);
+            break;
+          case 'chat_history':
+            this.historySubject.next(data.messages);
+            break;
         }
-      } catch {
-        // ignore malformed messages
+      } catch (err) {
+        console.error('WS parse error:', err);
       }
     };
 
@@ -71,7 +105,6 @@ export class WebsocketService implements OnDestroy {
       this.ws = null;
       if (!this.destroyed) {
         this.statusSubject.next('disconnected');
-        // Exponential backoff reconnect (max 30s)
         this.reconnectTimer = setTimeout(() => {
           this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
           this.openSocket();

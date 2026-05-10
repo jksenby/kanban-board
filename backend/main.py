@@ -8,7 +8,7 @@ import asyncio
 import json
 import database
 import auth
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 app = FastAPI(title="StudentSync API")
 
@@ -44,11 +44,11 @@ class ConnectionManager:
             if not self.active_connections[board_id]:
                 del self.active_connections[board_id]
 
-    async def broadcast(self, board_id: str, tasks: list):
-        """Broadcast updated task list to all clients watching this board."""
+    async def broadcast(self, board_id: str, data: dict):
+        """Broadcast data (tasks or messages) to all clients watching this board."""
         if board_id not in self.active_connections:
             return
-        message = json.dumps({"type": "tasks_updated", "tasks": tasks})
+        message = json.dumps(data)
         dead = []
         for ws in self.active_connections[board_id]:
             try:
@@ -96,6 +96,14 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = None
     position: Optional[int] = None
 
+class MessageResponse(BaseModel):
+    id: str
+    boardId: str
+    userId: str
+    username: str
+    content: str
+    timestamp: str
+
 # ─── Auth Dependency ──────────────────────────────────────────────────────────
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -116,13 +124,37 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 async def websocket_endpoint(websocket: WebSocket, board_id: str):
     await manager.connect(board_id, websocket)
     try:
-        # Send current tasks immediately on connect so the client is in sync
+        # Initial data push: Tasks
         tasks = database.get_tasks_for_board(board_id)
         await websocket.send_text(json.dumps({"type": "tasks_updated", "tasks": tasks}))
-        # Keep connection alive — we only broadcast from REST mutations
+        
+        # Initial data push: Recent Messages
+        messages = database.get_messages_for_board(board_id)
+        await websocket.send_text(json.dumps({"type": "chat_history", "messages": messages}))
+
         while True:
-            await websocket.receive_text()  # awaits any ping/close from client
+            # Handle incoming client messages (e.g., chat messages)
+            data = await websocket.receive_text()
+            message_data = json.loads(data)
+            
+            if message_data.get("type") == "send_message":
+                msg_payload = message_data.get("payload")
+                new_msg = {
+                    "id": str(uuid.uuid4()),
+                    "boardId": board_id,
+                    "userId": msg_payload["userId"],
+                    "username": msg_payload["username"],
+                    "content": msg_payload["content"],
+                    "timestamp": datetime.now().isoformat()
+                }
+                database.add_message(new_msg)
+                # Broadcast the message to everyone
+                await manager.broadcast(board_id, {"type": "chat_message", "message": new_msg})
+
     except WebSocketDisconnect:
+        manager.disconnect(board_id, websocket)
+    except Exception as e:
+        print(f"WS Error: {e}")
         manager.disconnect(board_id, websocket)
 
 # ─── Auth Endpoints ───────────────────────────────────────────────────────────
@@ -180,6 +212,10 @@ def delete_board(board_id: str, current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Not authorized or board not found")
     return {"message": "Board deleted"}
 
+@app.get("/api/boards/{board_id}/messages", response_model=List[MessageResponse])
+def get_board_messages(board_id: str):
+    return database.get_messages_for_board(board_id)
+
 # ─── Task Endpoints ───────────────────────────────────────────────────────────
 
 @app.get("/api/boards/{board_id}/tasks", response_model=List[Task])
@@ -193,7 +229,7 @@ async def create_task(board_id: str, task: Task):
     database.add_task(task.dict())
     # Broadcast to all connected clients
     tasks = database.get_tasks_for_board(board_id)
-    asyncio.create_task(manager.broadcast(board_id, tasks))
+    asyncio.create_task(manager.broadcast(board_id, {"type": "tasks_updated", "tasks": tasks}))
     return task
 
 @app.patch("/api/tasks/{task_id}")
@@ -204,7 +240,7 @@ async def update_task(task_id: str, update: TaskUpdate):
     if task_row:
         board_id = task_row['boardId']
         tasks = database.get_tasks_for_board(board_id)
-        asyncio.create_task(manager.broadcast(board_id, tasks))
+        asyncio.create_task(manager.broadcast(board_id, {"type": "tasks_updated", "tasks": tasks}))
     return {"message": "Task updated"}
 
 @app.delete("/api/tasks/{task_id}")
@@ -214,7 +250,7 @@ async def delete_task(task_id: str):
     if task_row:
         board_id = task_row['boardId']
         tasks = database.get_tasks_for_board(board_id)
-        asyncio.create_task(manager.broadcast(board_id, tasks))
+        asyncio.create_task(manager.broadcast(board_id, {"type": "tasks_updated", "tasks": tasks}))
     return {"message": "Task deleted"}
 
 @app.put("/api/boards/{board_id}/tasks")
@@ -225,5 +261,5 @@ async def update_all_tasks(board_id: str, tasks: List[Task]):
     database.update_all_tasks([task.dict() for task in tasks])
     # Broadcast the saved state to all connected clients
     updated = database.get_tasks_for_board(board_id)
-    asyncio.create_task(manager.broadcast(board_id, updated))
+    asyncio.create_task(manager.broadcast(board_id, {"type": "tasks_updated", "tasks": updated}))
     return {"message": "Tasks updated"}

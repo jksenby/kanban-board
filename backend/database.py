@@ -39,6 +39,19 @@ def init_db():
         )
     ''')
     
+    # Messages table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id TEXT PRIMARY KEY,
+            boardId TEXT NOT NULL,
+            userId TEXT NOT NULL,
+            username TEXT NOT NULL,
+            content TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            FOREIGN KEY (boardId) REFERENCES boards (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -174,5 +187,26 @@ def update_all_tasks(tasks: List[Dict[str, Any]]) -> None:
         ''', (task['id'], task['title'], task['status'], task['boardId'], task.get('position', 0)))
     conn.commit()
     conn.close()
+
+# Message Methods
+def add_message(message: Dict[str, Any]) -> None:
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO messages (id, boardId, userId, username, content, timestamp) 
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (message['id'], message['boardId'], message['userId'], message['username'], message['content'], message['timestamp']))
+    conn.commit()
+    conn.close()
+
+def get_messages_for_board(board_id: str) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    # Limit to last 50 messages
+    cursor.execute('SELECT * FROM messages WHERE boardId = ? ORDER BY timestamp ASC LIMIT 100', (board_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 init_db()
