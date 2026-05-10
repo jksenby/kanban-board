@@ -106,6 +106,15 @@ def delete_board(board_id: str, owner_id: str) -> bool:
     return success
 
 # Task Methods
+def get_task(task_id: str) -> Dict[str, Any]:
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM tasks WHERE id = ?', (task_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
 def get_tasks_for_board(board_id: str) -> List[Dict[str, Any]]:
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row

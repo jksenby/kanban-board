@@ -1,4 +1,4 @@
-import { Component, OnInit, computed } from '@angular/core';
+import { Component, OnInit, OnDestroy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -31,12 +31,31 @@ import { Task, TaskStatus } from '../../models/task.model';
           </div>
         </div>
         
-        <button (click)="copyInviteLink()" class="btn-secondary !py-2.5 !px-5 text-sm flex items-center space-x-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          <span>{{ copied ? 'Link Copied' : 'Share Board' }}</span>
-        </button>
+        <!-- Right side: Live indicator + Share button -->
+        <div class="flex items-center space-x-3">
+          <!-- Live connection indicator -->
+          <div class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-500"
+               [ngClass]="{
+                 'bg-emerald-50 border-emerald-200 text-emerald-700': wsStatus() === 'connected',
+                 'bg-amber-50 border-amber-200 text-amber-700': wsStatus() === 'connecting',
+                 'bg-slate-100 border-slate-200 text-slate-500': wsStatus() === 'disconnected'
+               }">
+            <span class="w-2 h-2 rounded-full transition-colors duration-500"
+                  [ngClass]="{
+                    'bg-emerald-500 animate-pulse': wsStatus() === 'connected',
+                    'bg-amber-400 animate-pulse': wsStatus() === 'connecting',
+                    'bg-slate-400': wsStatus() === 'disconnected'
+                  }"></span>
+            <span>{{ wsStatus() === 'connected' ? 'Live' : wsStatus() === 'connecting' ? 'Connecting…' : 'Offline' }}</span>
+          </div>
+
+          <button (click)="copyInviteLink()" class="btn-secondary !py-2.5 !px-5 text-sm flex items-center space-x-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <span>{{ copied ? 'Link Copied' : 'Share Board' }}</span>
+          </button>
+        </div>
       </header>
 
       <!-- Main Content -->
@@ -189,7 +208,7 @@ import { Task, TaskStatus } from '../../models/task.model';
     }
   `]
 })
-export class BoardComponent implements OnInit {
+export class BoardComponent implements OnInit, OnDestroy {
   boardId: string = '';
   boardTitle: string = '';
   newTaskTitle: string = '';
@@ -197,6 +216,9 @@ export class BoardComponent implements OnInit {
   
   editingTaskId: string | null = null;
   editingTitle: string = '';
+
+  // Expose ws status to template — assigned in constructor after DI
+  wsStatus!: typeof this.boardService.wsStatus;
   
   // Computed signals for columns
   todoTasks = computed(() => 
@@ -220,7 +242,9 @@ export class BoardComponent implements OnInit {
   constructor(
     private route: ActivatedRoute,
     private boardService: BoardService
-  ) {}
+  ) {
+    this.wsStatus = this.boardService.wsStatus;
+  }
 
   ngOnInit(): void {
     this.boardId = this.route.snapshot.paramMap.get('id') || '';
@@ -231,6 +255,10 @@ export class BoardComponent implements OnInit {
         this.boardTitle = board.title;
       });
     }
+  }
+
+  ngOnDestroy(): void {
+    this.boardService.disconnectWebSocket();
   }
 
   addTask(): void {
@@ -280,7 +308,6 @@ export class BoardComponent implements OnInit {
   }
 
   private saveOrder(): void {
-    // Note: todoTasks(), inProgressTasks() etc return new arrays, but we map them to get a full board state
     const updatedTasks: Task[] = [
       ...this.todoTasks().map((t, i) => ({ ...t, status: 'TODO' as TaskStatus, position: i })),
       ...this.inProgressTasks().map((t, i) => ({ ...t, status: 'IN_PROGRESS' as TaskStatus, position: i })),
